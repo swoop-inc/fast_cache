@@ -1,0 +1,52 @@
+#!/usr/bin/env ruby
+
+lib = File.expand_path('../../lib', __FILE__)
+$LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
+
+require 'fast_cache'
+require 'lru_redux'
+require 'active_support/cache'
+require 'json'
+
+class ModifiedLru < LruRedux::Cache
+  # Modify API to be consistent with other caches
+  def fetch(key, &block)
+    getset(key, &block)
+  end
+end
+
+def make_caches(size, exemplar_value, ttl)
+  marshaled = Marshal.dump(exemplar_value)
+  {
+      lru_redux: ModifiedLru.new(size),
+      fast_cache: FastCache::Cache.new(size, ttl),
+      memory_store: ActiveSupport::Cache.lookup_store(:memory_store, size: size * marshaled.length + 1)
+  }
+end
+
+def complex_value
+  sample_file = File.expand_path('../../bench/caching_sample.json',  __FILE__)
+  JSON.parse(File.read(sample_file))
+end
+
+def run_test(size, value, ttl = 60*60)
+  caches = make_caches(size, value, ttl)
+
+  Benchmark.bmbm do |bm|
+    caches.each.map(&:last).map(&:clear)
+
+    caches.each_pair do |name, cache|
+      bm.report name do
+        1000000.times do
+          cache.fetch(rand(2 * size)) { value }
+        end
+      end
+    end
+  end
+end
+
+puts "Simple value benchmark\n"
+run_test 1_000, :value
+
+puts "\nComplex value benchmark\n"
+run_test 1_000, complex_value
