@@ -101,7 +101,7 @@ memory_store 1286.790000   1.850000 1288.640000 (1289.115472)
 
 In both tests FastCache::Cache is 2-3x slower than LruRedux::Cache, which only provides LRU expiration semantics. For small values, FastCache::Cache is 5x faster than ActiveSupport::Cache::MemoryStore. For more complex values the difference grows to 50-100x (67x in the particular benchmark).
 
-In one case of CSV generation where every row involved looking up model attributes FastCache was more than 100 times faster. Operations that took many minutes now happen in seconds.
+In one reporting application where generating every row required looking up model attributes FastCache was more than 100 times faster. Operations that took many minutes now happen in seconds.
 
 
 ## Implementation
