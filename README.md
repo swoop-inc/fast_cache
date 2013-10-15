@@ -1,17 +1,16 @@
 # FastCache
 
 
-There are two reasons why you may want to immediately leave this page:
+There are two reasons why you may want to skip this:
 
 1. This is yet another caching gem, which is grounds for extreme suspicion.
-
 2. Many Ruby developers don't care about performance.
 
-If you're still reading, there are three reasons why you may want to check this out:
+If you're still reading, there are three reasons why this is worth checking out:
 
-1. Performance is a feature users love. Products from 37signals' to Google's have proven this time and time again. Performance almost never matters if you are not successful but almost always does if you are. At [Swoop](http://swoop.com) we have tens of millions of users. We care about correctness, simplicity and maintainability but also, quite a bit, about performance.
+1. Performance is a feature users love. Products from 37signals' to Google's have proven this time and time again. Performance almost never matters if you are not successful but almost always does if you are. At [Swoop](http://swoop.com) we have tens of millions of users. We care about correctness, simplicity and maintainability but also about performance.
 
-2. This cache benchmarks 10-100x faster than ActiveSupport::Cache::MemoryStore without breaking a sweat. You can switch to FastCache in a couple minutes and, most likely, you won't have to refactor your tests. FastCache has 100% test coverage at 20+ hits/line. There are no third party runtime dependencies so you can use this anywhere with Ruby 1.9+.
+2. This cache benchmarks 10-100x faster than [ActiveSupport::Cache::MemoryStore](http://api.rubyonrails.org/classes/ActiveSupport/Cache/MemoryStore.html) without breaking a sweat. You can switch to FastCache in a couple minutes and, most likely, you won't have to refactor your tests. FastCache has 100% test coverage at 20+ hits/line. There are no third party runtime dependencies so you can use this anywhere with Ruby 1.9+.
 
 3. The implementation exploits some neat features of Ruby's native data structures that could be useful and fun to learn about.
 
@@ -35,7 +34,7 @@ Or install it yourself as:
 
 FastCache::Cache is an in-process cache with least recently used (LRU) and time to live (TTL) expiration semantics, which makes it an easy replacement for ActiveSupport::Cache::MemoryStore as well as a great candidate for the in-process portion of a hierarchical caching system (FastCache sitting in front of, say, memcached or Redis).
 
-The current implementation is not thread-safe because at [Swoop](http://swoop.com) we prefer to handle simple concurrency in MRI Ruby via the [reactor pattern](http://en.wikipedia.org/wiki/Reactor_pattern) with [eventmachine](https://github.com/eventmachine/eventmachine). An easy way to add thread safety would be via a [synchronizing subclass](https://github.com/SamSaffron/lru_redux/blob/master/lib/lru_redux/thread_safe_cache.rb) or decorator. Send a pull request, please!
+The current implementation is not thread-safe because at [Swoop](http://swoop.com) we prefer to handle simple concurrency in MRI Ruby via the [reactor pattern](http://en.wikipedia.org/wiki/Reactor_pattern) with [eventmachine](https://github.com/eventmachine/eventmachine). An easy way to add thread safety would be via a [synchronizing subclass](https://github.com/SamSaffron/lru_redux/blob/master/lib/lru_redux/thread_safe_cache.rb) or decorator.
 
 The implementation does not use a separate thread for expiring stale cached values. Instead, before a value is returned from the cache, its expiration time is checked. In order to avoid the case where a value that is never accessed cannot be removed, every _N_ operations the cache removes all expired values.
 
@@ -61,7 +60,7 @@ cache.expire!
 
 ## Performance
 
-If you are looking for an in-process cache with LRU and time-to-live expiration semantics the go-to implementation is ActiveSupport::Cache::MemoryStore, which as of Rails 3.1 [started marshaling](http://apidock.com/rails/v3.2.13/ActiveSupport/Cache/Entry/value) the data even though the keys and values never leave the process boundary. The performance of the cache is dominated by marshaling and loading, i.e., by the size and complexity of keys and values. The better job you do of finding large, complex, cacheable data structures, the slower it will run. That doesn't feel right for an in-process cache.
+If you are looking for an in-process cache with LRU and time-to-live expiration semantics the go-to implementation is [ActiveSupport::Cache::MemoryStore](http://api.rubyonrails.org/classes/ActiveSupport/Cache/MemoryStore.html), which as of Rails 3.1 [started marshaling](http://apidock.com/rails/v3.2.13/ActiveSupport/Cache/Entry/value) the data even though the keys and values never leave the process boundary. The performance of the cache is dominated by marshaling and loading, i.e., by the size and complexity of keys and values. The better job you do of finding large, complex, cacheable data structures, the slower it will run. That doesn't feel right for an in-process cache.
 
 We benchmark against [LruRedux::Cache](https://github.com/SamSaffron/lru_redux), which was the inspiration behind FastCache::Cache and, of course, ActiveSupport::Cache::MemoryStore.
 
@@ -74,7 +73,7 @@ bin/fast-cache-benchmark
 The [benchmark](bin/fast-cache-benchmark) includes a simple value test (caching just the Symbol `:value`) and a more complex value test (caching a [medium-size data structure](bench/caching_sample.json)). Both tests run for one million iterations with an expected cache hit rate of 50%.
 
 ```
-12009[SPX/fast_cache(master *#)]$ bin/fast-cache-benchmark
+$ bin/fast-cache-benchmark
 Simple value benchmark
 Rehearsal ------------------------------------------------
 lru_redux      2.200000   0.020000   2.220000 (  2.213863)
@@ -100,41 +99,38 @@ fast_cache    19.620000   0.030000  19.650000 ( 19.650379)
 memory_store 1286.790000   1.850000 1288.640000 (1289.115472)
 ```
 
-In both tests FastCache::Cache is 2-3x slower than LruRedux::Cache, which only provides LRU semantics. For small values, FastCache::Cache is 5x faster than ActiveSupport::Cache::MemoryStore. For more complex values the difference grows to 50+x (67x in the particular benchmark).
+In both tests FastCache::Cache is 2-3x slower than LruRedux::Cache, which only provides LRU expiration semantics. For small values, FastCache::Cache is 5x faster than ActiveSupport::Cache::MemoryStore. For more complex values the difference grows to 50-100x (67x in the particular benchmark).
 
-In one case where we were generating CSVs where every row involved looking up model attributes the performance difference was 100x and operations that took many minutes now happen in seconds.
+In one case of CSV generation where every row involved looking up model attributes FastCache was more than 100 times faster. Operations that took many minutes now happen in seconds.
 
 
 ## Implementation
 
-[Sam Saffron](https://github.com/SamSaffron) noticed that Ruby 1.9 Hash's property to preserve insertion order can be used as a second index (in addition to indexing by a key).  That led Sam to create the [lru_redux](https://github.com/SamSaffron/lru_redux) gem, whose cache behaves in a very non-intuitive way at first glance. For example, the simplified pseudocode for the cache get operation is:
+[Sam Saffron](https://github.com/SamSaffron) noticed that Ruby 1.9 Hash's property to preserve insertion order can be used as a second index into the hash, in addition to indexing by a key.  That led Sam to create the [lru_redux](https://github.com/SamSaffron/lru_redux) gem, whose cache behaves in a very non-intuitive way at first glance. For example, the simplified pseudocode for the cache get operation is:
 
 ```
 cache[key]:
-  value = @hash.delete(key)
-  @hash[key] = value
+  value = @data.delete(key)
+  @data[key] = value
   value
 ```
 
-In other words, the code performs two mutating operations (delete and insert) in order to satisfy a single non-mutating operation (get). Why? The reason is that this is how the cache maintains its least recently used removal property. The picture below shows the get operation step-by-step using a fictitious cache of names against some difficult-to-compute score.
+In other words, the code performs two mutating operations (delete and insert) in order to satisfy a single non-mutating operation (get). Why? The reason is that this is how the cache maintains its least recently used removal property. The picture below shows the get operation step-by-step using a fictitious cache of names against some difficult-to-compute scores.
 
 ![lru](https://www.lucidchart.com/publicSegments/view/525be92f-6034-40f7-b3b6-377d0a005604/image.png)
-If the cache gets full, it can create space by removing elements from the head of its items array. For those of you familiar with [Redis](http://redis.io), this approach to using a Ruby Hash may remind you of [sorted sets](http://redis.io/commands#sorted_set).
+If the cache gets full, it can create space by removing elements from the front of its insertion order data structure using [Hash#shift](http://www.ruby-doc.org/core-2.0.0/Hash.html#method-i-shift).
+
+For those of you familiar with [Redis](http://redis.io), this approach to using a Ruby Hash may remind you of [sorted sets](http://redis.io/commands#sorted_set).
 
 To add time-based expiration, we need to:
 
 1. Keep track of expiration times.
-
 2. Index by expiration time, to clean up in `expire!`.
-
 3. Efficiently remove items from the expiration index when a stale item is detected.
 
-By exploiting the dual index property of Hash we can achieve this with just one extra hash. The diagram below shows the object relationships.
+By exploiting the dual index property of Hash we can achieve this with just one extra "expires" hash, which is the inverse of our "data" hash. We keep the data hash ordered by recency of use and the expires hash ordered by insertion order, which is also the removal order because the time to live is constant. The diagram below shows the object relationships.
 
-![lru-and-ttl](https://www.lucidchart.com/publicSegments/view/525be9d7-fe08-40fb-9dd2-37850a005603/image.png)
-### A note about Time
-
-Those who peek at the code may notice the expression `Time.now.to_f`. Rails has some very nice time extensions, e.g., dealing with time zones and the ability to add and subtract duration objects from date/time objects. All this sugar, which is of no use to us here, comes at a significant overhead so much so that I have benchmarked the cache running several times slower in a Rails environment without the conversion of the time object to a simple number.
+![lru-and-ttl](https://www.lucidchart.com/publicSegments/view/525c994d-5b2c-48d3-aaf6-3fcb0a00d3e5/image.png)
 
 
 ## Contributing
@@ -150,7 +146,7 @@ Please don't change the version and add solid tests: [simplecov](https://github.
 
 ## Credits
 
-I'd like to thank [Sam Saffron](https://github.com/SamSaffron) for his guiding insight as well as [Richard Schneeman](https://github.com/schneems) and [Piotr Sarnacki](https://github.com/drogus) for [helping me improve](https://github.com/rails/rails/issues/11512) ActiveSupport::Cache::MemoryStore.
+[Sam Saffron](https://github.com/SamSaffron) for his guiding insight as well as [Richard Schneeman](https://github.com/schneems) and [Piotr Sarnacki](https://github.com/drogus) for [helping improve](https://github.com/rails/rails/issues/11512) ActiveSupport::Cache::MemoryStore.
 
 Who says Ruby can't be fun **and** fast?
 
