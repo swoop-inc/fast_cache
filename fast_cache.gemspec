@@ -24,4 +24,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "simplecov"
   spec.add_development_dependency "awesome_print"
   spec.add_development_dependency "timecop"
+  spec.add_development_dependency "yard"
+  spec.add_development_dependency "redcarpet"
 end
