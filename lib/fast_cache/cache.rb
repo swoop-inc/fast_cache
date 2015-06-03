@@ -201,8 +201,8 @@ module FastCache
     end
 
     def shrink_if_needed
-      if @data.length > @max_size
-        entry = delete(@data.shift)
+      while @data.length > @max_size
+        entry = @data.shift.last
         @expires_at.delete(entry)
       end
     end
