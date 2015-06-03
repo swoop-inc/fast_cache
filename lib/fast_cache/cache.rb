@@ -39,6 +39,7 @@ module FastCache
       @op_count = 0
       @data = {}
       @expires_at = {}
+      @cleanup = Proc.new if block_given?
     end
 
     # Retrieves a value from the cache, if available and not expired, or
@@ -84,6 +85,7 @@ module FastCache
       entry = @data.delete(key)
       if entry
         @expires_at.delete(entry)
+        @cleanup.call(entry.value) if @cleanup
         entry.value
       else
         nil
@@ -103,6 +105,7 @@ module FastCache
     #
     # @return [self]
     def clear
+      @data.values.map(&:value).map(&@cleanup) if @cleanup
       @data.clear
       @expires_at.clear
       self
@@ -176,6 +179,7 @@ module FastCache
       if found
         if entry.expires_at <= t
           @expires_at.delete(entry)
+          @cleanup.call(entry.value) if @cleanup
           return false, nil
         else
           @data[key] = entry
@@ -194,7 +198,9 @@ module FastCache
     end
 
     def store_entry(key, entry)
-      @data.delete(key)
+      found = true
+      old_entry = @data.delete(key) { found = false }
+      @cleanup.call(old_entry.value) if @cleanup && found
       @data[key] = entry
       @expires_at[entry] = key
       shrink_if_needed
@@ -204,6 +210,7 @@ module FastCache
       if @data.length > @max_size
         entry = delete(@data.shift)
         @expires_at.delete(entry)
+        @cleanup.call(entry.value) if @cleanup
       end
     end
 
@@ -212,7 +219,8 @@ module FastCache
         while (key_value_pair = @expires_at.first) &&
             (entry = key_value_pair.first).expires_at <= t
           key = @expires_at.delete(entry)
-          @data.delete(key)
+          entry = @data.delete(key)
+          @cleanup.call(entry.value) if @cleanup
         end
       end
     end
