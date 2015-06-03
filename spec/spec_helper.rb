@@ -1,3 +1,4 @@
+require 'rspec/its'
 require 'simplecov'
 SimpleCov.start
 SimpleCov.minimum_coverage 100
