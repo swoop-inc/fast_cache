@@ -109,7 +109,7 @@ module FastCache
     #
     # @return [self]
     def clear
-      @data.values.map(&:value).map(&@cleanup) if @cleanup
+      @data.each_value {|entry| @cleanup.call(entry.value)} if @cleanup
       @data.clear
       @expires_at.clear
       self
