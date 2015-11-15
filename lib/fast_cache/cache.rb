@@ -32,14 +32,18 @@ module FastCache
     #                      the cache.
     # @param [Integer] expire_interval Number of cache operations between
     #                                  calls to {#expire!}.
-    def initialize(max_size, ttl, expire_interval = 100)
+    # @yield [Object] If a block is given, each time an object is removed
+    #                 from the cache, it will be yielded to the block. This
+    #                 is useful for cleaning up resources used by objects
+    #                 stored in the cache.
+    def initialize(max_size, ttl, expire_interval = 100, &cleanup)
       @max_size = max_size
       @ttl = ttl.to_f
       @expire_interval = expire_interval
       @op_count = 0
       @data = {}
       @expires_at = {}
-      @cleanup = Proc.new if block_given?
+      @cleanup = cleanup
     end
 
     # Retrieves a value from the cache, if available and not expired, or
