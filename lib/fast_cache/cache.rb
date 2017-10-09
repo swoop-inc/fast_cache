@@ -32,10 +32,12 @@ module FastCache
     #                      the cache.
     # @param [Integer] expire_interval Number of cache operations between
     #                                  calls to {#expire!}.
-    def initialize(max_size, ttl, expire_interval = 100)
+    def initialize(max_size, ttl, expire_interval = 100, max_mem_size=nil)
       @max_size = max_size
       @ttl = ttl.to_f
       @expire_interval = expire_interval
+      @max_mem_size = max_mem_size
+      @mem_size = 0
       @op_count = 0
       @data = {}
       @expires_at = {}
@@ -83,6 +85,7 @@ module FastCache
     def delete(key)
       entry = @data.delete(key)
       if entry
+        @mem_size-= (key.to_s.bytesize + entry.mem_size)
         @expires_at.delete(entry)
         entry.value
       else
@@ -105,6 +108,7 @@ module FastCache
     def clear
       @data.clear
       @expires_at.clear
+      @mem_size = 0
       self
     end
 
@@ -157,14 +161,28 @@ module FastCache
 
     private
 
+
     # @private
     class Entry
       attr_reader :value
       attr_reader :expires_at
+      attr_reader :mem_size
 
       def initialize(value, expires_at)
         @value = value
+        @mem_size = object_size(value)
         @expires_at = expires_at
+      end
+ 
+      def object_size(value)
+        case value
+        when NilClass,TrueClass,FalseClass
+          1
+        when String
+          value.bytesize
+        else
+          Marshal.dump(value).bytesize
+        end
       end
     end
 
@@ -175,6 +193,7 @@ module FastCache
       entry = @data.delete(key) { found = false }
       if found
         if entry.expires_at <= t
+          @mem_size-= (key.to_s.bytesize + entry.mem_size)
           @expires_at.delete(entry)
           return false, nil
         else
@@ -194,15 +213,18 @@ module FastCache
     end
 
     def store_entry(key, entry)
-      @data.delete(key)
+      old_entry = @data.delete(key)
+      @mem_size-= (key.to_s.bytesize + old_entry.mem_size) unless old_entry.nil?
       @data[key] = entry
+      @mem_size+= (key.to_s.bytesize + entry.mem_size)
       @expires_at[entry] = key
       shrink_if_needed
     end
 
     def shrink_if_needed
-      if @data.length > @max_size
-        entry = delete(@data.shift)
+      while (@data.length > @max_size) or ((not @max_mem_size.nil?) and @mem_size > 0.75*@max_mem_size)
+        key,entry = @data.shift
+        @mem_size-= (key.to_s.bytesize + entry.mem_size)
         @expires_at.delete(entry)
       end
     end
@@ -212,6 +234,7 @@ module FastCache
         while (key_value_pair = @expires_at.first) &&
             (entry = key_value_pair.first).expires_at <= t
           key = @expires_at.delete(entry)
+          @mem_size-= (key.to_s.bytesize + entry.mem_size)
           @data.delete(key)
         end
       end
