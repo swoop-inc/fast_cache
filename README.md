@@ -1,4 +1,4 @@
-# FastCache &nbsp; [![Build Status](https://secure.travis-ci.org/swoop-inc/fast_cache.png)](http://travis-ci.org/swoop-inc/fast_cache?branch=master)
+# FastCache
 
 
 There are two reasons why you may want to skip this:
