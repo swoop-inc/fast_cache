@@ -15,14 +15,19 @@ describe FastCache::Cache do
     end
   end
 
-  context 'non-empty cache' do
+  shared_context :non_empty_cache do
+    let(:cache) { described_class.new(3, 60, 1) }
     before do
-      @cache = described_class.new(3, 60, 1)
+      @cache = cache
       @cache[:a] = 1
       @cache[:b] = 2
       @cache[:c] = 3
     end
     subject { @cache }
+  end
+
+  context 'non-empty cache' do
+    include_context :non_empty_cache
 
     its(:empty?) { should be_falsey }
     its(:length) { should eq 3 }
@@ -110,6 +115,42 @@ describe FastCache::Cache do
         subject[:c].should be_nil
         subject[:d].should eq 4
         subject[:e].should eq 6
+      end
+    end
+
+    describe 'cleanup block' do
+      let(:cleanups) { [] }
+      let(:ttl) { 60 }
+      let(:cache) { described_class.new(3, ttl, 1) do |obj|
+        cleanups << obj
+      end }
+      it 'is called when the cache is cleared' do
+        subject.clear
+        cleanups.should =~ [1,2,3]
+      end
+      it 'is called when an item is deleted' do
+        subject.delete(:a).should eq 1
+        cleanups.should =~ [1]
+      end
+      it 'is called when an existing item is replaced' do
+        subject[:a] = 11
+        cleanups.should =~ [1]
+      end
+      it 'is called when an item is removed when full' do
+        subject[:d] = 4
+        cleanups.should =~ [1]
+      end
+
+      context 'with immediate expiration' do
+        let(:ttl) { 0 }
+        it 'is called when items are expired' do
+          subject.expire!
+          cleanups.should =~ [1,2,3]
+        end
+        it 'is called when item access triggers expiration' do
+          subject[:a].should be_nil
+          cleanups.should =~ [1,2,3]
+        end
       end
     end
   end

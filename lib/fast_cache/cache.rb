@@ -32,13 +32,18 @@ module FastCache
     #                      the cache.
     # @param [Integer] expire_interval Number of cache operations between
     #                                  calls to {#expire!}.
-    def initialize(max_size, ttl, expire_interval = 100)
+    # @yield [Object] If a block is given, each time an object is removed
+    #                 from the cache, it will be yielded to the block. This
+    #                 is useful for cleaning up resources used by objects
+    #                 stored in the cache.
+    def initialize(max_size, ttl, expire_interval = 100, &cleanup)
       @max_size = max_size
       @ttl = ttl.to_f
       @expire_interval = expire_interval
       @op_count = 0
       @data = {}
       @expires_at = {}
+      @cleanup = cleanup
     end
 
     # Retrieves a value from the cache, if available and not expired, or
@@ -84,6 +89,7 @@ module FastCache
       entry = @data.delete(key)
       if entry
         @expires_at.delete(entry)
+        @cleanup.call(entry.value) if @cleanup
         entry.value
       else
         nil
@@ -103,6 +109,7 @@ module FastCache
     #
     # @return [self]
     def clear
+      @data.each_value {|entry| @cleanup.call(entry.value)} if @cleanup
       @data.clear
       @expires_at.clear
       self
@@ -176,6 +183,7 @@ module FastCache
       if found
         if entry.expires_at <= t
           @expires_at.delete(entry)
+          @cleanup.call(entry.value) if @cleanup
           return false, nil
         else
           @data[key] = entry
@@ -194,7 +202,9 @@ module FastCache
     end
 
     def store_entry(key, entry)
-      @data.delete(key)
+      found = true
+      old_entry = @data.delete(key) { found = false }
+      @cleanup.call(old_entry.value) if @cleanup && found
       @data[key] = entry
       @expires_at[entry] = key
       shrink_if_needed
@@ -204,6 +214,7 @@ module FastCache
       if @data.length > @max_size
         entry = delete(@data.shift)
         @expires_at.delete(entry)
+        @cleanup.call(entry.value) if @cleanup
       end
     end
 
@@ -212,7 +223,8 @@ module FastCache
         while (key_value_pair = @expires_at.first) &&
             (entry = key_value_pair.first).expires_at <= t
           key = @expires_at.delete(entry)
-          @data.delete(key)
+          entry = @data.delete(key)
+          @cleanup.call(entry.value) if @cleanup
         end
       end
     end
