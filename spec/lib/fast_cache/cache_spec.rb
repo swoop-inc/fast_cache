@@ -41,6 +41,14 @@ describe FastCache::Cache do
       subject[:a].should eq 10
     end
 
+    describe '#shrink_if_needed' do
+      it 'deletes the entry correctly' do
+        subject[:d] = 4
+        subject.instance_variable_get('@data').keys.should =~ [ :b, :c, :d ]
+        subject.instance_variable_get('@expires_at').values.should =~ [ :b, :c, :d ]
+      end
+    end
+
     describe '#fetch' do
       it 'fetches from the cache when a key is present' do
         subject.fetch(:a) do
